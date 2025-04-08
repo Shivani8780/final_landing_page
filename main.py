@@ -20,16 +20,52 @@ load_dotenv()  # Load environment variables from .env
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'Landig_project_by_Shivani')
 # Database URL (fix old 'postgres://' format to 'postgresql://')
+import urllib.parse
 database_url = os.getenv('DATABASE_URL', 'sqlite:///tickets.db')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+# Decode URL-encoded characters
+database_url = urllib.parse.unquote(database_url)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,  # Enable connection health checks
+    'pool_recycle': 300,    # Recycle connections after 5 minutes
+    'pool_timeout': 30,     # Connection timeout in seconds
+    'max_overflow': 20      # Maximum number of overflow connections
+}
 
 # Initialize extensions
 db = SQLAlchemy(app)
+
+import logging
+from time import sleep
+from sqlalchemy.exc import OperationalError
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Test database connection with retries
+def check_db_connection(max_retries=3, retry_delay=2):
+    for attempt in range(max_retries):
+        try:
+            db.session.execute('SELECT 1')
+            logger.info("Database connection successful")
+            return True
+        except OperationalError as e:
+            logger.warning(f"Database connection attempt {attempt + 1} failed: {str(e)}")
+            if attempt < max_retries - 1:
+                sleep(retry_delay)
+                continue
+            logger.error("Max retries reached, could not connect to database")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected database connection error: {str(e)}")
+            raise
+
+check_db_connection()
 migrate = Migrate(app, db)
 api = Api(app)
 CORS(app)
@@ -128,7 +164,35 @@ class TicketForm(FlaskForm):
 
 def check_auth(username, password):
     """Check if a username/password combination is valid."""
-    return username == 'admin' and password == 'Shiva'  # Replace with secure method
+    import bcrypt
+    # Required .env variables:
+    # ADMIN_USERNAME=your_admin_username
+    # ADMIN_PASSWORD_HASH=your_bcrypt_hash
+    
+    # Generate hash with: bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    admin_hash = os.environ.get('ADMIN_PASSWORD_HASH', '').encode('utf-8')
+    return (username == os.environ.get('ADMIN_USERNAME') and 
+            bcrypt.checkpw(password.encode('utf-8'), admin_hash))
+
+def db_operation(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        try:
+            # Verify connection is alive
+            db.session.execute('SELECT 1')
+            return f(*args, **kwargs)
+        except OperationalError:
+            logger.warning("Database connection lost, attempting to reconnect")
+            try:
+                db.session.rollback()
+                db.session.close()
+                db.session.execute('SELECT 1')  # Reconnect
+                logger.info("Database reconnected successfully")
+                return f(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"Failed to reconnect to database: {str(e)}")
+                raise
+    return decorated
 
 def requires_auth(f):
     @wraps(f)
@@ -137,6 +201,15 @@ def requires_auth(f):
             return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
     return decorated
+
+@app.route('/health')
+def health_check():
+    """Endpoint to check database health"""
+    try:
+        db.session.execute('SELECT 1')
+        return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+    except Exception as e:
+        return jsonify({'status': 'unhealthy', 'database': 'disconnected', 'error': str(e)}), 500
 
 # Load event data
 def load_events():
@@ -156,22 +229,36 @@ def history():
 @app.route('/tickets', methods=['GET', 'POST'])
 def tickets():
     if request.method == 'POST':
-        # Process form data
-        name = request.form.get('name')
-        email = request.form.get('email')
-        quantity = int(request.form.get('quantity'))
-        event = request.form.get('event')
-        
-        # Calculate amount (example: ₹500 per ticket)
-        amount = quantity * 500  # Amount in INR
-        
-        # Create a new order in the database
-        order = TicketOrder(name=name, email=email, quantity=quantity, event=event, amount=amount)
-        db.session.add(order)
-        db.session.commit()
-        
-        # Redirect to WhatsApp
-        return redirect(url_for('whatsapp_redirect', order_id=order.id))
+        try:
+            # Process form data
+            name = request.form.get('name')
+            email = request.form.get('email')
+            quantity = int(request.form.get('quantity'))
+            event = request.form.get('event')
+            
+            # Validate inputs
+            if not all([name, email, quantity, event]):
+                flash('Please fill all required fields', 'error')
+                return redirect(url_for('tickets'))
+            
+            # Calculate amount (example: ₹500 per ticket)
+            amount = quantity * 500  # Amount in INR
+            
+            # Verify database connection
+            db.session.execute('SELECT 1')
+            
+            # Create a new order in the database
+            order = TicketOrder(name=name, email=email, quantity=quantity, event=event, amount=amount)
+            db.session.add(order)
+            db.session.commit()
+            
+            # Redirect to WhatsApp
+            return redirect(url_for('whatsapp_redirect', order_id=order.id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error processing your order: {str(e)}', 'error')
+            return redirect(url_for('tickets'))
     
     return render_template('tickets.html')
 
