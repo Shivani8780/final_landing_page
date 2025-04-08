@@ -18,13 +18,22 @@
     <nav class="bg-black text-white p-4 shadow-lg">
         <div class="container mx-auto flex justify-between items-center">
             <a href="/" class="text-2xl font-bold">Concert<span class="text-blue-400">Connect</span></a>
-            <div class="space-x-6">
+            <div class="space-x-6 hidden md:flex">
                 <a href="/" class="hover:text-blue-400 transition" aria-label="Home">Home</a>
                 <a href="/history" class="hover:text-blue-400 transition" aria-label="Past Events">Past Events</a>
                 <a href="/tickets" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition" aria-label="Get Tickets">Get Tickets</a>
             </div>
+            <button class="md:hidden text-white" id="menu-button">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+        <div class="md:hidden" id="mobile-menu" style="display: none;">
+            <a href="/" class="block py-2 hover:text-blue-400 transition" aria-label="Home">Home</a>
+            <a href="/history" class="block py-2 hover:text-blue-400 transition" aria-label="Past Events">Past Events</a>
+            <a href="/tickets" class="block py-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition" aria-label="Get Tickets">Get Tickets</a>
         </div>
     </nav>
+    
 
     <main class="container mx-auto py-8 px-4">
         {% block content %}{% endblock %}
@@ -51,5 +60,18 @@
             </div>
         {% endif %}
     {% endwith %}
+
+    <script>
+        const menuButton = document.getElementById('menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+    
+        menuButton.addEventListener('click', () => {
+            if (mobileMenu.style.display === 'none') {
+                mobileMenu.style.display = 'block';
+            } else {
+                mobileMenu.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
