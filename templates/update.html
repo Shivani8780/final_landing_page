@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Update Order{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold mb-6">Update Order</h1>
+<form method="post" class="bg-white shadow-md rounded-lg p-6">
+    <div class="mb-4">
+        <label for="name" class="block text-gray-700">Name:</label>
+        <input type="text" name="name" value="{{ order.name }}" required class="w-full px-3 py-2 border rounded">
+    </div>
+    <div class="mb-4">
+        <label for="email" class="block text-gray-700">Email:</label>
+        <input type="email" name="email" value="{{ order.email }}" required class="w-full px-3 py-2 border rounded">
+    </div>
+    <div class="mb-4">
+        <label for="quantity" class="block text-gray-700">Quantity:</label>
+        <input type="number" name="quantity" value="{{ order.quantity }}" min="1" max="10" required class="w-full px-3 py-2 border rounded">
+    </div>
+    <div class="mb-4">
+        <label for="event" class="block text-gray-700">Event:</label>
+        <select name="event" required class="w-full px-3 py-2 border rounded">
+            <option value="winter-festival" {% if order.event == 'winter-festival' %}selected{% endif %}>Winter Music Festival 2025</option>
+            <option value="spring-jazz" {% if order.event == 'spring-jazz' %}selected{% endif %}>Spring Jazz Night 2025</option>
+            <option value="summer-rock" {% if order.event == 'summer-rock' %}selected{% endif %}>Summer Rock Fest 2025</option>
+        </select>
+    </div>
+    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Update</button>
+</form>
+{% endblock %}
