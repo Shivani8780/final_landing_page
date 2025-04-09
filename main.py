@@ -41,12 +41,20 @@ if db_url:
     # Configure database with SSL for Railway
     if 'railway' in db_url.lower():
         db_url += "?sslmode=require"
+
+
+# Configure database first
+if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('DATABASE_URL'):
+    db_url = os.getenv('DATABASE_URL', '')
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    if 'railway' in db_url.lower():
+        db_url += "?sslmode=require"
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    print(f"Using database URL: {db_url}")  # For debugging
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://ticket_user:simplepass123@localhost:5432/ticket_db'
 
-
-# Initialize extensions
+# Then initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
@@ -313,5 +321,7 @@ def get_event_name(event_id):
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()  # Ensure tables are created before running the app
+        print("Creating database tables...")
+        db.create_all()  # Create all database tables
+        print("Database tables created successfully!")
     app.run(debug=True)
