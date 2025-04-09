@@ -18,17 +18,19 @@ from sqlalchemy.exc import SQLAlchemyError
 load_dotenv()  # Load environment variables from .env
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-development-key-here')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '21c7ea302dc6eed1fba8887dcdf7e3e8246c91b95ac4750ccb730b50ceb49b56')
 
-# Railway production configuration
-if 'RAILWAY_ENVIRONMENT' in os.environ:
-    # On Railway - use their PostgreSQL
-    db_url = os.environ['DATABASE_URL']
-    if 'localhost' in db_url or '127.0.0.1' in db_url:
-        raise ValueError("Production cannot use localhost database")
+# Database configuration
+if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('DATABASE_URL'):
+    # Use Railway or other production database
+    db_url = os.getenv('DATABASE_URL', '')
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    if not db_url:
+        raise ValueError("Database URL not configured")
 else:
     # Local development
-    db_url = os.getenv('DATABASE_URL', 'postgresql://ticket_user:simplepass123@localhost:5432/ticket_db')
+    db_url = 'postgresql://ticket_user:simplepass123@localhost:5432/ticket_db'
 
 # Convert postgres:// to postgresql:// if needed
 if db_url.startswith('postgres://'):
@@ -36,14 +38,25 @@ if db_url.startswith('postgres://'):
 if db_url:
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    # Configure database with SSL for Railway
+    if 'railway' in db_url.lower():
+        db_url += "?sslmode=require"
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     print(f"Using database URL: {db_url}")  # For debugging
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 
 # Initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+# Test database connection
+with app.app_context():
+    try:
+        db.engine.connect()
+        print("Database connection successful!")
+    except Exception as e:
+        print(f"Database connection failed: {str(e)}")
 api = Api(app)
 CORS(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
@@ -184,8 +197,14 @@ def tickets():
         
         # Create a new order in the database
         order = TicketOrder(name=name, email=email, quantity=quantity, event=event, amount=amount)
-        db.session.add(order)
-        db.session.commit()
+        try:
+            db.session.add(order)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database error: {str(e)}")
+            flash('Failed to save order. Please try again.', 'error')
+            return redirect(url_for('tickets'))
         
         # Redirect to WhatsApp
         return redirect(url_for('whatsapp_redirect', order_id=order.id))
