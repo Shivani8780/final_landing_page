@@ -18,8 +18,16 @@ from sqlalchemy.exc import SQLAlchemyError
 load_dotenv()  # Load environment variables from .env
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'Landig_project_by_Shivani')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///tickets.db').replace('postgres://', 'postgresql://')
+app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+# Railway provides DATABASE_URL automatically
+db_url = os.environ['DATABASE_URL']
+if db_url:
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    # Remove any URL encoding if present
+    db_url = db_url.replace('%3A', ':').replace('%2F', '/').replace('%40', '@')
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    print(f"Using database URL: {db_url}")  # For debugging
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 
