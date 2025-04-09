@@ -15,15 +15,17 @@ import json
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
 
-from config import Config
-
 load_dotenv()  # Load environment variables from .env
 
 app = Flask(__name__)
-app.config.from_object(Config)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-development-key-here')
 
-db_url = app.config['DATABASE_URL']
+# Force production database when running in Railway
+if os.getenv('RAILWAY_ENVIRONMENT'):
+    db_url = os.environ['DATABASE_URL']  # Required in production
+else:
+    # Local development fallback
+    db_url = os.getenv('DATABASE_URL', 'postgresql://ticket_user:simplepass123@localhost:5432/ticket_db')
 if db_url:
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
