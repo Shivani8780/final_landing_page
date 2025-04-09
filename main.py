@@ -1,4 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify
+import io
+import xlsxwriter
 from flask_restful import Api, Resource, reqparse
 from config import get_config
 from flask_sqlalchemy import SQLAlchemy
@@ -160,6 +162,41 @@ def admin_dashboard():
     
     orders = TicketOrder.query.order_by(TicketOrder.created_at.desc()).all()
     return render_template('admin_orders.html', orders=orders)
+
+@app.route('/admin/export')
+def export_orders():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    orders = TicketOrder.query.order_by(TicketOrder.created_at.desc()).all()
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+    
+    # Write headers
+    headers = ['ID', 'Name', 'Email', 'Event', 'Quantity', 'Amount', 'Date']
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header)
+    
+    # Write data
+    for row, order in enumerate(orders, start=1):
+        worksheet.write(row, 0, order.id)
+        worksheet.write(row, 1, order.name)
+        worksheet.write(row, 2, order.email)
+        worksheet.write(row, 3, get_event_name(order.event))
+        worksheet.write(row, 4, order.quantity)
+        worksheet.write(row, 5, order.amount)
+        worksheet.write(row, 6, order.created_at.strftime('%Y-%m-%d %H:%M'))
+    
+    workbook.close()
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name='orders_export.xlsx',
+        as_attachment=True
+    )
 
 @app.route('/admin/logout')
 def admin_logout():
