@@ -81,6 +81,20 @@ def home():
     event_date = datetime(2025, 12, 25, 19, 30)
     return render_template('index.html', event_date=event_date.isoformat())
 
+@app.route('/whatsapp_redirect')
+def whatsapp_redirect():
+    order_id = request.args.get('order_id')
+    order = TicketOrder.query.get(order_id)
+    
+    if order:
+        whatsapp_number = "6352641421"  # Replace with your WhatsApp number
+        message = f"Hello, I would like to purchase {order.quantity} tickets for {get_event_name(order.event)}"
+        whatsapp_url = f"https://wa.me/{whatsapp_number}?text={message}"
+        return redirect(whatsapp_url)
+    
+    flash('Order not found', 'error')
+    return redirect(url_for('tickets'))
+
 @app.route('/tickets', methods=['GET', 'POST'])
 def tickets():
     if request.method == 'POST':
@@ -102,6 +116,14 @@ def tickets():
         return redirect(url_for('whatsapp_redirect', order_id=order.id))
     
     return render_template('tickets.html')
+
+def get_event_name(event_id):
+    names = {
+        'winter-festival': 'Winter Music Festival 2025',
+        'spring-jazz': 'Spring Jazz Night 2025',
+        'summer-rock': 'Summer Rock Fest 2025'
+    }
+    return names.get(event_id, 'Unknown Event')
 
 # [Include all your other existing routes here]
 
