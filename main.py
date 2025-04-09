@@ -138,6 +138,68 @@ def history():
     events = load_events()
     return render_template('history.html', events=events)
 
+# Admin routes
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Replace with your actual admin credentials
+        if username == 'admin' and password == 'admin123':
+            session['admin_logged_in'] = True
+            return redirect(url_for('admin_dashboard'))
+        
+        flash('Invalid credentials', 'error')
+    return render_template('admin_login.html')
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    orders = TicketOrder.query.order_by(TicketOrder.created_at.desc()).all()
+    return render_template('admin_orders.html', orders=orders)
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin_logged_in', None)
+    return redirect(url_for('home'))
+
+@app.route('/admin/orders/<int:order_id>/delete', methods=['POST'])
+def delete_order(order_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    order = TicketOrder.query.get_or_404(order_id)
+    db.session.delete(order)
+    db.session.commit()
+    flash('Order deleted successfully', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/orders/<int:order_id>/update', methods=['GET', 'POST'])
+def update_order(order_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    order = TicketOrder.query.get_or_404(order_id)
+    if request.method == 'POST':
+        order.name = request.form.get('name', order.name)
+        order.email = request.form.get('email', order.email)
+        order.quantity = int(request.form.get('quantity', order.quantity))
+        order.event = request.form.get('event', order.event)
+        order.amount = order.quantity * 500
+        
+        try:
+            db.session.commit()
+            flash('Order updated successfully', 'success')
+            return redirect(url_for('admin_dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating order', 'error')
+    
+    return render_template('update.html', order=order)
+
 # [Include all your other existing routes here]
 
 if __name__ == '__main__':
