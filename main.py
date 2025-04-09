@@ -18,9 +18,9 @@ from sqlalchemy.exc import SQLAlchemyError
 load_dotenv()  # Load environment variables from .env
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-development-key-here')
 # Railway provides DATABASE_URL automatically
-db_url = os.environ['DATABASE_URL']
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///tickets.db')
 if db_url:
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
