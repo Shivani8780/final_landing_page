@@ -17,8 +17,25 @@ import json
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
 
+def load_events():
+    try:
+        with open('data/events.json') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading events: {str(e)}")
+        return []
+
+def get_event_name(event_id):
+    names = {
+        'winter-festival': 'Winter Music Festival 2025',
+        'spring-jazz': 'Spring Jazz Night 2025',
+        'summer-rock': 'Summer Rock Fest 2025'
+    }
+    return names.get(event_id, 'Unknown Event')
+
 app = Flask(__name__)
 app.config.from_object(get_config())
+app.jinja_env.globals.update(get_event_name=get_event_name)
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -161,7 +178,9 @@ def admin_dashboard():
         return redirect(url_for('admin_login'))
     
     orders = TicketOrder.query.order_by(TicketOrder.created_at.desc()).all()
-    return render_template('admin_orders.html', orders=orders)
+    return render_template('admin_orders.html', 
+                         orders=orders,
+                         get_event_name=get_event_name)
 
 @app.route('/admin/export')
 def export_orders():
