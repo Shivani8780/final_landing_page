@@ -117,6 +117,14 @@ def tickets():
     
     return render_template('tickets.html')
 
+def load_events():
+    try:
+        with open('data/events.json') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading events: {str(e)}")
+        return []
+
 def get_event_name(event_id):
     names = {
         'winter-festival': 'Winter Music Festival 2025',
@@ -124,6 +132,11 @@ def get_event_name(event_id):
         'summer-rock': 'Summer Rock Fest 2025'
     }
     return names.get(event_id, 'Unknown Event')
+
+@app.route('/history')
+def history():
+    events = load_events()
+    return render_template('history.html', events=events)
 
 # [Include all your other existing routes here]
 
