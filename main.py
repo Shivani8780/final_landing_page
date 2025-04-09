@@ -146,6 +146,10 @@ def load_events():
     with open('data/events.json') as f:
         return json.load(f)
 
+@app.route('/health')
+def health_check():
+    return {'status': 'healthy'}, 200
+
 @app.route('/')
 def home():
     event_date = datetime(2025, 12, 25, 19, 30)  # Updated to 2025
