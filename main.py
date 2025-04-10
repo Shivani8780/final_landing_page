@@ -34,17 +34,67 @@ def get_event_name(event_id):
     return names.get(event_id, 'Unknown Event')
 
 app = Flask(__name__)
-app.config.from_object(get_config())
-app.jinja_env.globals.update(get_event_name=get_event_name)
 
-# Initialize extensions
+# Load configuration based on environment
+env = os.getenv('FLASK_ENV', 'development')
+print(f"Loading configuration for FLASK_ENV={env}")
+if env == 'production':
+    from prod_config import ProdConfig
+    app.config.from_object(ProdConfig)
+    # Explicitly set required config values
+    app.config['RATELIMIT_STORAGE_URL'] = ProdConfig.RATELIMIT_STORAGE_URL
+    app.config['SQLALCHEMY_DATABASE_URI'] = ProdConfig.SQLALCHEMY_DATABASE_URI
+else:
+    app.config.from_object(get_config())
+    app.config['RATELIMIT_STORAGE_URL'] = 'memory://'
+
+# Initialize extensions after config is loaded
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 api = Api(app)
 CORS(app)
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+
+# Initialize limiter with fallback to memory
+try:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri=app.config.get('RATELIMIT_STORAGE_URL', 'memory://'),
+        default_limits=app.config.get('RATELIMIT_DEFAULT', ["200 per day", "50 per hour"])
+    )
+    storage_type = type(limiter.storage).__name__
+    if storage_type == 'RedisStorage':
+        try:
+            print(f"Rate limiter using Redis storage at: {limiter.storage.storage_url}")
+        except AttributeError:
+            print("Rate limiter using Redis storage (URL not accessible)")
+    else:
+        print(f"Rate limiter using {storage_type} storage")
+except Exception as e:
+    print("Failed to initialize Redis, falling back to in-memory storage:", str(e))
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri='memory://',
+        default_limits=["200 per day", "50 per hour"]
+    )
+app.jinja_env.globals.update(get_event_name=get_event_name)
+
+# This ensures the CLI commands work properly
+def register_commands(app):
+    @app.cli.command()
+    def init_db():
+        """Initialize the database."""
+        db.create_all()
 
 # Your TicketOrder model
+class GalleryItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    image_url = db.Column(db.String(500), nullable=False)
+    youtube_url = db.Column(db.String(500))
+    caption = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class TicketOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event = db.Column(db.String(50), nullable=False)
@@ -152,6 +202,11 @@ def get_event_name(event_id):
     }
     return names.get(event_id, 'Unknown Event')
 
+@app.route('/gallery')
+def gallery():
+    items = GalleryItem.query.order_by(GalleryItem.created_at.desc()).all()
+    return render_template('gallery.html', gallery_items=items)
+
 @app.route('/history')
 def history():
     events = load_events()
@@ -171,6 +226,36 @@ def admin_login():
         
         flash('Invalid credentials', 'error')
     return render_template('admin_login.html')
+
+@app.route('/admin/gallery', methods=['GET', 'POST'])
+def manage_gallery():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    if request.method == 'POST':
+        image_url = request.form.get('image_url')
+        youtube_url = request.form.get('youtube_url')
+        caption = request.form.get('caption')
+        
+        item = GalleryItem(image_url=image_url, youtube_url=youtube_url, caption=caption)
+        db.session.add(item)
+        db.session.commit()
+        flash('Gallery item added successfully', 'success')
+        return redirect(url_for('manage_gallery'))
+    
+    items = GalleryItem.query.order_by(GalleryItem.created_at.desc()).all()
+    return render_template('admin_gallery.html', items=items)
+
+@app.route('/admin/gallery/<int:item_id>/delete', methods=['POST'])
+def delete_gallery_item(item_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    item = GalleryItem.query.get_or_404(item_id)
+    db.session.delete(item)
+    db.session.commit()
+    flash('Gallery item deleted successfully', 'success')
+    return redirect(url_for('manage_gallery'))
 
 @app.route('/admin/dashboard')
 def admin_dashboard():

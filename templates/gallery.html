@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Gallery{% endblock %}
+
+{% block content %}
+<section class="mb-16">
+    <h1 class="text-4xl font-bold mb-8 text-center">Event Gallery</h1>
+    
+    <div class="swiper-container">
+        <div class="swiper-wrapper">
+            {% for item in gallery_items %}
+            <div class="swiper-slide">
+                <img src="{{ item.image_url }}" alt="Gallery Image" class="w-full h-auto">
+                <div class="text-center mt-4">
+                    <a href="{{ item.youtube_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                        Watch Video
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="swiper-pagination"></div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const swiper = new Swiper('.swiper-container', {
+        loop: true,
+        autoplay: {
+            delay: 3000,
+            disableOnInteraction: false,
+        },
+        pagination: {
+            el: '.swiper-pagination',
+            clickable: true,
+        },
+    });
+});
+</script>
+{% endblock %}
