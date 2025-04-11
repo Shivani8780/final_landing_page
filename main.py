@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify
+# Import gallery components
+from gallery_module import gallery_bp, GalleryItem
 import io
 import xlsxwriter
 from flask_restful import Api, Resource, reqparse
 from config import get_config
-from flask_sqlalchemy import SQLAlchemy
+from database import db
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -34,6 +36,7 @@ def get_event_name(event_id):
     return names.get(event_id, 'Unknown Event')
 
 app = Flask(__name__)
+app.register_blueprint(gallery_bp, url_prefix='/gallery')
 
 # Load configuration based on environment
 env = os.getenv('FLASK_ENV', 'development')
@@ -49,7 +52,7 @@ else:
     app.config['RATELIMIT_STORAGE_URL'] = 'memory://'
 
 # Initialize extensions after config is loaded
-db = SQLAlchemy(app)
+db.init_app(app)
 migrate = Migrate(app, db)
 api = Api(app)
 CORS(app)
@@ -86,14 +89,6 @@ def register_commands(app):
     def init_db():
         """Initialize the database."""
         db.create_all()
-
-# Your TicketOrder model
-class GalleryItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    image_url = db.Column(db.String(500), nullable=False)
-    youtube_url = db.Column(db.String(500))
-    caption = db.Column(db.String(200))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class TicketOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -202,11 +197,6 @@ def get_event_name(event_id):
     }
     return names.get(event_id, 'Unknown Event')
 
-@app.route('/gallery')
-def gallery():
-    items = GalleryItem.query.order_by(GalleryItem.created_at.desc()).all()
-    return render_template('gallery.html', gallery_items=items)
-
 @app.route('/history')
 def history():
     events = load_events()
@@ -233,11 +223,28 @@ def manage_gallery():
         return redirect(url_for('admin_login'))
     
     if request.method == 'POST':
-        image_url = request.form.get('image_url')
-        youtube_url = request.form.get('youtube_url')
-        caption = request.form.get('caption')
+        # Get form data
+        image_url = request.form.get('image_url', '').strip()
+        youtube_url = request.form.get('youtube_url', '').strip()
+        caption = request.form.get('caption', '').strip()
         
-        item = GalleryItem(image_url=image_url, youtube_url=youtube_url, caption=caption)
+        # Validate URLs
+        if youtube_url:
+            if not ('youtube.com' in youtube_url or 'youtu.be' in youtube_url):
+                flash('Please enter a valid YouTube URL', 'error')
+                return redirect(url_for('manage_gallery'))
+            item = GalleryItem(media_url=youtube_url, media_type='youtube', caption=caption)
+        elif image_url:
+            if not image_url.startswith(('http://', 'https://')):
+                flash('Please enter a valid image URL (must start with http:// or https://)', 'error')
+                return redirect(url_for('manage_gallery'))
+            if not any(ext in image_url.lower().split('?')[0] for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                flash('Image URL should contain .jpg, .jpeg, .png, .gif or .webp before any query parameters', 'warning')
+                return redirect(url_for('manage_gallery'))
+            item = GalleryItem(media_url=image_url, media_type='image', caption=caption)
+        else:
+            flash('Please provide either an image or YouTube URL', 'error')
+            return redirect(url_for('manage_gallery'))
         db.session.add(item)
         db.session.commit()
         flash('Gallery item added successfully', 'success')
@@ -341,7 +348,19 @@ def update_order(order_id):
     
     return render_template('update.html', order=order)
 
-# [Include all your other existing routes here]
+@app.route('/debug/gallery')
+def debug_gallery():
+    items = GalleryItem.query.all()
+    output = []
+    for item in items:
+        output.append({
+            'id': item.id,
+            'media_url': item.media_url,
+            'media_type': item.media_type,
+            'image_url': item.image_url,
+            'youtube_url': item.youtube_url
+        })
+    return jsonify(output)
 
 if __name__ == '__main__':
     with app.app_context():

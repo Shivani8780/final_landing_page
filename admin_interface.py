@@ -14,28 +14,36 @@ def create_admin_blueprint(upload_folder='static/uploads'):
         return '.' in filename and \
                filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    @admin_bp.route('/upload', methods=['POST'])
-    def upload_media():
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-            
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-            
-        media_type = 'video' if file.filename.lower().endswith(('.mp4', '.mov')) else 'image'
-        caption = request.form.get('caption', '')
+    @admin_bp.route('/gallery', methods=['POST'])
+    def add_gallery_item():
+        data = request.form
+        media_type = data.get('media_type')
+        media_url = data.get('media_url')
+        caption = data.get('caption', '')
         
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(upload_folder, filename)
-            file.save(filepath)
+        if not media_type or not media_url:
+            return jsonify({'error': 'Both media type and URL are required'}), 400
             
+        if media_type not in ['image', 'youtube']:
+            return jsonify({'error': 'Invalid media type'}), 400
+            
+        if media_type == 'youtube':
+            if not media_url.startswith('https://youtu.be/'):
+                return jsonify({'error': 'YouTube URLs must start with https://youtu.be/'}), 400
+            # Normalize YouTube URL
+            media_url = media_url.split('?')[0]  # Remove any query parameters
+            kwargs['media_url'] = media_url
+            
+        try:
+            # Create new gallery item
             new_item = GalleryItem(
-                media_url=f'/{filepath}',
+                media_url=media_url,
                 media_type=media_type,
-                caption=caption
+                caption=caption,
+                image_url=media_url if media_type == 'image' else None,
+                youtube_url=media_url if media_type == 'youtube' else None
             )
+            
             db.session.add(new_item)
             db.session.commit()
             
@@ -48,7 +56,9 @@ def create_admin_blueprint(upload_folder='static/uploads'):
                     'caption': new_item.caption
                 }
             }), 201
-
-        return jsonify({'error': 'File type not allowed'}), 400
-
+            
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'Failed to add gallery item: {str(e)}'}), 500
+        
     return admin_bp

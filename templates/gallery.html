@@ -6,36 +6,45 @@
 <section class="mb-16">
     <h1 class="text-4xl font-bold mb-8 text-center">Event Gallery</h1>
     
-    <div class="swiper-container">
-        <div class="swiper-wrapper">
-            {% for item in gallery_items %}
-            <div class="swiper-slide">
-                <img src="{{ item.image_url }}" alt="Gallery Image" class="w-full h-auto">
-                <div class="text-center mt-4">
-                    <a href="{{ item.youtube_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">
-                        Watch Video
-                    </a>
+    <div class="flex justify-center mb-8 space-x-4">
+        <a href="?filter=all" class="px-4 py-2 rounded-lg {% if current_filter == 'all' %}bg-blue-500 text-white{% else %}bg-gray-200{% endif %}">
+            All Media
+        </a>
+        <a href="?filter=images" class="px-4 py-2 rounded-lg {% if current_filter == 'images' %}bg-blue-500 text-white{% else %}bg-gray-200{% endif %}">
+            Images Only
+        </a>
+        <a href="?filter=videos" class="px-4 py-2 rounded-lg {% if current_filter == 'videos' %}bg-blue-500 text-white{% else %}bg-gray-200{% endif %}">
+            Videos Only
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for item in gallery_items %}
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            {% if item.media_type == 'image' or (item.media_url and item.media_type != 'youtube' and 'youtu' not in (item.media_url or '')) %}
+                <img src="{{ item.media_url }}" alt="{{ item.caption|default('Gallery Image') }}" class="w-full h-48 object-cover">
+            {% elif item.media_type == 'youtube' or 'youtu' in item.media_url %}
+                <div class="aspect-w-16 aspect-h-9">
+                    {% if 'youtube.com/watch' in item.media_url %}
+                        <iframe src="https://www.youtube.com/embed/{{ item.media_url.split('v=')[1].split('&')[0] }}" 
+                                frameborder="0" 
+                                allowfullscreen
+                                class="w-full h-48"></iframe>
+                    {% elif 'youtu.be' in item.media_url %}
+                        <iframe src="https://www.youtube.com/embed/{{ item.media_url.split('/')[-1] }}" 
+                                frameborder="0" 
+                                allowfullscreen
+                                class="w-full h-48"></iframe>
+                    {% endif %}
                 </div>
-            </div>
-            {% endfor %}
+            {% endif %}
+            {% if item.caption %}
+                <div class="p-4">
+                    <p class="text-gray-700">{{ item.caption }}</p>
+                </div>
+            {% endif %}
         </div>
-        <div class="swiper-pagination"></div>
+        {% endfor %}
     </div>
 </section>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const swiper = new Swiper('.swiper-container', {
-        loop: true,
-        autoplay: {
-            delay: 3000,
-            disableOnInteraction: false,
-        },
-        pagination: {
-            el: '.swiper-pagination',
-            clickable: true,
-        },
-    });
-});
-</script>
 {% endblock %}
