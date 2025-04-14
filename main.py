@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify
 # Import gallery components
-from gallery_module import gallery_bp, GalleryItem
+from gallery_module import gallery_bp
+from gallery_routes_enhanced_fixed import bp as gallery_enhanced_bp
 import io
 import xlsxwriter
 from flask_restful import Api, Resource, reqparse
@@ -36,7 +37,17 @@ def get_event_name(event_id):
     return names.get(event_id, 'Unknown Event')
 
 app = Flask(__name__)
+
+# Security headers
+@app.after_request
+def add_security_headers(response):
+    response.headers['Cache-Control'] = 'no-store, max-age=0'
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'self'"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    return response
 app.register_blueprint(gallery_bp, url_prefix='/gallery')
+app.register_blueprint(gallery_enhanced_bp, url_prefix='/gallery-enhanced')
 
 # Load configuration based on environment
 env = os.getenv('FLASK_ENV', 'development')
@@ -223,28 +234,38 @@ def manage_gallery():
         return redirect(url_for('admin_login'))
     
     if request.method == 'POST':
-        # Get form data
-        image_url = request.form.get('image_url', '').strip()
-        youtube_url = request.form.get('youtube_url', '').strip()
+        # Get form data from new form structure
+        media_type = request.form.get('media_type', '').strip()
+        media_url = request.form.get('media_url', '').strip()
         caption = request.form.get('caption', '').strip()
         
-        # Validate URLs
-        if youtube_url:
-            if not ('youtube.com' in youtube_url or 'youtu.be' in youtube_url):
-                flash('Please enter a valid YouTube URL', 'error')
+        # Validate based on media type
+        if media_type == 'youtube':
+            if not ('youtube.com' in media_url or 'youtu.be' in media_url):
+                flash('Please enter a valid YouTube URL (should contain youtube.com or youtu.be)', 'error')
                 return redirect(url_for('manage_gallery'))
-            item = GalleryItem(media_url=youtube_url, media_type='youtube', caption=caption)
-        elif image_url:
-            if not image_url.startswith(('http://', 'https://')):
-                flash('Please enter a valid image URL (must start with http:// or https://)', 'error')
+        elif media_type == 'image':
+            if not media_url.startswith(('http://', 'https://')):
+                flash('Image URL must start with http:// or https://', 'error')
                 return redirect(url_for('manage_gallery'))
-            if not any(ext in image_url.lower().split('?')[0] for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
-                flash('Image URL should contain .jpg, .jpeg, .png, .gif or .webp before any query parameters', 'warning')
-                return redirect(url_for('manage_gallery'))
-            item = GalleryItem(media_url=image_url, media_type='image', caption=caption)
-        else:
-            flash('Please provide either an image or YouTube URL', 'error')
-            return redirect(url_for('manage_gallery'))
+            if not any(ext in media_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                flash('Note: For best results, use URLs ending with .jpg, .jpeg, .png, .gif or .webp', 'info')
+        
+        # Create item
+        print(f"Raw caption input: '{caption}'")
+        
+        # Create item - model will handle caption processing
+        item = GalleryItem(
+            media_url=media_url,
+            media_type=media_type,
+            caption=caption  # Pass raw caption
+        )
+        # Force caption update to ensure it's processed
+        if hasattr(item, '_caption'):
+            item._caption = caption.strip() if caption else ''
+        print(f"Item after creation - Caption: '{item.caption}'")
+        
+        print(f"Item being saved - Caption: '{item.caption}'")
         db.session.add(item)
         db.session.commit()
         flash('Gallery item added successfully', 'success')

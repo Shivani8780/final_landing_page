@@ -10,13 +10,16 @@ class GalleryItem(db.Model):
     youtube_url = db.Column(db.String(500), nullable=True, info={'migrate': True})  # Kept for backward compatibility
     media_url = db.Column(db.String(500), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)  # 'image' or 'youtube'
-    caption = db.Column(db.String(200))
+    caption = db.Column(db.String(200), nullable=False, default='', server_default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __init__(self, media_url=None, media_type=None, caption=None, **kwargs):
         # Process media fields before initialization
         media_type = (media_type or '').lower().strip()
         media_url = (media_url or '').strip()
+        
+        # Explicitly handle caption
+        self.caption = caption.strip() if caption else ''
         
         # Validate and normalize media type
         if media_url:
