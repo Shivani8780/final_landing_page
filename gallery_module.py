@@ -11,6 +11,7 @@ class GalleryItem(db.Model):
     media_url = db.Column(db.String(500), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)  # 'image' or 'youtube'
     caption = db.Column(db.String(200), nullable=False, default='', server_default='')
+    is_available = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __init__(self, media_url=None, media_type=None, caption=None, **kwargs):
@@ -88,21 +89,29 @@ def fix_classification():
 @gallery_bp.route('/', strict_slashes=False)
 def gallery():
     media_filter = request.args.get('filter', 'all')
+    print(f"Gallery filter parameter: {media_filter}")  # Debug log
     
     query = GalleryItem.query
     
     if media_filter == 'images':
         query = query.filter(
             (GalleryItem.media_type == 'image') &
-            (GalleryItem.image_url.isnot(None))
+            (GalleryItem.media_url.isnot(None)) &
+            (GalleryItem.is_available == True)
         )
     elif media_filter == 'videos':
         query = query.filter(
             (GalleryItem.media_type == 'youtube') &
-            (GalleryItem.youtube_url.isnot(None))
+            (GalleryItem.youtube_url.isnot(None)) &
+            (GalleryItem.youtube_url != '') &
+            (GalleryItem.is_available == True)
         )
+    else:
+        query = query.filter(GalleryItem.is_available == True)
     
-    items = query.order_by(GalleryItem.created_at.desc()).all()
+    items = query.order_by(GalleryItem.created_at.asc()).all()
+    
+    print(f"Number of items fetched: {len(items)}")  # Debug log
     
     # Ensure media_url is not None before passing to template
     for item in items:

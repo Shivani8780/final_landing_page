@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}Gallery{% endblock %}
 
 {% block content %}
@@ -27,12 +26,14 @@
             {% endif %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for item in gallery_items if item.media_type == 'image' %}
-                <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden transition-transform hover:scale-105 h-full flex flex-col">
                     <img src="{{ item.media_url or item.image_url }}" 
                          alt="{{ item.caption|default('Event Photo') }}" 
                          class="w-full h-64 object-cover">
-                    <div class="p-4">
-                        <p class="text-lg font-semibold">{{ item.caption or 'Event Photo' }}</p>
+                    <div class="p-4 bg-gradient-to-r from-blue-50 to-white flex-shrink-0">
+                        <p class="text-lg font-semibold text-gray-800">
+                            {{ item.caption or 'Event Photo' }}
+                        </p>
                         <p class="text-sm text-gray-500">
                             Added {{ item.created_at.strftime('%b %d, %Y') }}
                         </p>
@@ -43,37 +44,35 @@
         </div>
         {% endif %}
 
-        <!-- Videos Section -->
+        <!-- Videos Section with Thumbnail Style -->
         {% if current_filter != 'images' %}
         <div class="mt-12">
             {% if current_filter != 'videos' %}
             <h2 class="text-3xl font-bold mb-6 text-center">Event Videos</h2>
             {% endif %}
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {% for item in gallery_items if item.media_type == 'youtube' %}
-                <div class="bg-white rounded-xl shadow-lg overflow-hidden">
-                    <div class="relative" style="padding-bottom: 56.25%">
-                        {% if 'youtube.com/watch' in item.media_url %}
-                        <iframe src="https://www.youtube.com/embed/{{ item.media_url.split('v=')[1].split('&')[0] }}" 
-                                class="absolute inset-0 w-full h-full"
-                                frameborder="0"
-                                allowfullscreen
-                                title="{{ item.caption|default('Event Video') }}"></iframe>
-                        {% elif 'youtu.be' in item.media_url %}
-                        <iframe src="https://www.youtube.com/embed/{{ item.media_url.split('/')[-1] }}" 
-                                class="absolute inset-0 w-full h-full"
-                                frameborder="0"
-                                allowfullscreen
-                                title="{{ item.caption|default('Event Video') }}"></iframe>
-                        {% endif %}
-                    </div>
-                    <div class="p-4">
-                        <p class="text-lg font-semibold">{{ item.caption or 'Event Video' }}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
+                {% for item in gallery_items if item.media_type == 'youtube' and item.is_available %}
+                {% set video_id = None %}
+                {% if item.media_url and 'youtube.com/watch' in item.media_url %}
+                    {% set video_id = item.media_url.split('v=')[1].split('&')[0] %}
+                {% elif item.media_url and 'youtu.be' in item.media_url %}
+                    {% set video_id = item.media_url.split('/')[-1] %}
+                {% endif %}
+                {% if video_id %}
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden transition-transform hover:scale-105 h-full flex flex-col">
+                    <a href="https://www.youtube.com/watch?v={{ video_id }}" target="_blank" rel="noopener noreferrer" title="{{ item.caption or 'Event Video' }}">
+                        <img src="https://img.youtube.com/vi/{{ video_id }}/hqdefault.jpg" alt="{{ item.caption or 'Event Video' }}" class="w-full h-64 object-cover" />
+                    </a>
+                    <div class="p-4 bg-gradient-to-r from-blue-50 to-white flex-shrink-0">
+                        <p class="text-lg font-semibold text-gray-800">
+                            {{ item.caption or 'Event Video' }}
+                        </p>
                         <p class="text-sm text-gray-500">
                             Added {{ item.created_at.strftime('%b %d, %Y') }}
                         </p>
                     </div>
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>

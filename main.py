@@ -38,6 +38,10 @@ def get_event_name(event_id):
 
 app = Flask(__name__)
 
+# Set session cookie security attributes to fix cross-site cookie warnings
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = True
+
 # Security headers
 @app.after_request
 def add_security_headers(response):
@@ -101,6 +105,17 @@ def register_commands(app):
         """Initialize the database."""
         db.create_all()
 
+class GalleryItem(db.Model):
+    __tablename__ = 'gallery_item'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    serial_number = db.Column(db.Integer, nullable=True, unique=False)
+    media_url = db.Column(db.String(255), nullable=False)
+    media_type = db.Column(db.String(50), nullable=False)
+    caption = db.Column(db.String(255), nullable=True)
+    is_available = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class TicketOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event = db.Column(db.String(50), nullable=False)
@@ -154,7 +169,9 @@ class TicketForm(FlaskForm):
 @app.route('/')
 def home():
     event_date = datetime(2025, 12, 25, 19, 30)
-    return render_template('index.html', event_date=event_date.isoformat())
+    # Format event_date as ISO string without microseconds and timezone for better JS compatibility
+    event_date_str = event_date.strftime('%Y-%m-%dT%H:%M:%S')
+    return render_template('index.html', event_date=event_date_str)
 
 @app.route('/whatsapp_redirect')
 def whatsapp_redirect():
@@ -233,11 +250,16 @@ def manage_gallery():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
     
+    page = request.args.get('page', 1, type=int)
+    per_page = 10  # Number of items per page
+    
     if request.method == 'POST':
         # Get form data from new form structure
+        serial_number = request.form.get('serial_number')
         media_type = request.form.get('media_type', '').strip()
         media_url = request.form.get('media_url', '').strip()
         caption = request.form.get('caption', '').strip()
+        is_available = request.form.get('is_available') == 'on'
         
         # Validate based on media type
         if media_type == 'youtube':
@@ -256,14 +278,20 @@ def manage_gallery():
         
         # Create item - model will handle caption processing
         item = GalleryItem(
+            serial_number=int(serial_number) if serial_number else None,
             media_url=media_url,
             media_type=media_type,
-            caption=caption  # Pass raw caption
+            caption=caption,  # Pass raw caption
+            is_available=is_available
         )
         # Force caption update to ensure it's processed
         if hasattr(item, '_caption'):
             item._caption = caption.strip() if caption else ''
         print(f"Item after creation - Caption: '{item.caption}'")
+        
+        # Fix youtube_url field for youtube videos
+        if media_type == 'youtube' and not getattr(item, 'youtube_url', None):
+            item.youtube_url = media_url
         
         print(f"Item being saved - Caption: '{item.caption}'")
         db.session.add(item)
@@ -271,8 +299,9 @@ def manage_gallery():
         flash('Gallery item added successfully', 'success')
         return redirect(url_for('manage_gallery'))
     
-    items = GalleryItem.query.order_by(GalleryItem.created_at.desc()).all()
-    return render_template('admin_gallery.html', items=items)
+    pagination = GalleryItem.query.order_by(GalleryItem.created_at.desc()).paginate(page=page, per_page=per_page)
+    items = pagination.items
+    return render_template('admin_gallery.html', items=items, pagination=pagination)
 
 @app.route('/admin/gallery/<int:item_id>/delete', methods=['POST'])
 def delete_gallery_item(item_id):
@@ -284,6 +313,56 @@ def delete_gallery_item(item_id):
     db.session.commit()
     flash('Gallery item deleted successfully', 'success')
     return redirect(url_for('manage_gallery'))
+
+@app.route('/admin/gallery/<int:item_id>/update', methods=['GET', 'POST'])
+def update_gallery_item(item_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    item = GalleryItem.query.get_or_404(item_id)
+    
+    if request.method == 'POST':
+        print(f"Received POST request to update gallery item {item_id}")  # Debug log
+        serial_number = request.form.get('serial_number')
+        media_type = request.form.get('media_type', '').strip()
+        media_url = request.form.get('media_url', '').strip()
+        caption = request.form.get('caption', '').strip()
+        is_available = request.form.get('is_available') == 'on'
+        
+        print(f"Form data - serial_number: {serial_number}, media_type: {media_type}, media_url: {media_url}, caption: {caption}, is_available: {is_available}")  # Debug log
+        
+        # Validate based on media type
+        if media_type == 'youtube':
+            if not ('youtube.com' in media_url or 'youtu.be' in media_url):
+                flash('Please enter a valid YouTube URL (should contain youtube.com or youtu.be)', 'error')
+                return redirect(url_for('update_gallery_item', item_id=item_id))
+        elif media_type == 'image':
+            if not media_url.startswith(('http://', 'https://')):
+                flash('Image URL must start with http:// or https://', 'error')
+                return redirect(url_for('update_gallery_item', item_id=item_id))
+            if not any(ext in media_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                flash('Note: For best results, use URLs ending with .jpg, .jpeg, .png, .gif or .webp', 'info')
+        
+        try:
+            item.serial_number = int(serial_number) if serial_number else None
+        except ValueError:
+            flash('Serial number must be a valid integer', 'error')
+            return redirect(url_for('update_gallery_item', item_id=item_id))
+        
+        item.media_type = media_type
+        item.media_url = media_url
+        item.caption = caption
+        item.is_available = is_available
+        
+        # Fix youtube_url field for youtube videos
+        if media_type == 'youtube' and not getattr(item, 'youtube_url', None):
+            item.youtube_url = media_url
+        
+        db.session.commit()
+        flash('Gallery item updated successfully', 'success')
+        return redirect(url_for('manage_gallery'))
+    
+    return render_template('admin_gallery_update.html', item=item)
 
 @app.route('/admin/dashboard')
 def admin_dashboard():
@@ -387,3 +466,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True)
+

@@ -67,11 +67,11 @@
 
 {% block content %}
 <section class="hero text-white py-32 mb-16 rounded-lg">
-    <div class="container mx-auto text-center">
+    <div class="container mx-auto text-center" id="countdown" data-event-date="{{ event_date }}">
                 <h1 class="text-5xl font-bold mb-6">Winter Music Festival 2025</h1>
         <p class="text-xl mb-8 max-w-2xl mx-auto">Join us for the biggest music event of the year featuring top artists from around the world</p>
         
-        <div class="flex flex-wrap justify-center gap-2 mb-8" id="countdown">
+        <div class="flex flex-wrap justify-center gap-2 mb-8">
             <div class="bg-blue-600 p-2 sm:p-4 rounded-lg w-16 sm:w-24">
                 <div class="text-xl sm:text-3xl font-bold" id="days">00</div>
                 <div class="text-xs sm:text-sm">Days</div>
@@ -129,44 +129,50 @@
 {% block scripts %}
 <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
 <script>
-    // Countdown timer
-    const eventDate = new Date("{{ event_date }}").getTime();
-    
-    const updateCountdown = () => {
-        const now = new Date().getTime();
-        const distance = eventDate - now;
+    document.addEventListener('DOMContentLoaded', function () {
+        // Countdown timer
+        const countdownElement = document.getElementById('countdown');
+        const eventDateStr = countdownElement.getAttribute('data-event-date');
+        const eventDate = new Date(eventDateStr).getTime();
+        console.log("Event Date:", eventDate);
         
-        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        const updateCountdown = () => {
+            const now = new Date().getTime();
+            const distance = eventDate - now;
+            
+            if (distance < 0) {
+                clearInterval(countdownTimer);
+                countdownElement.innerHTML = "<div class='text-3xl font-bold'>The event has started!</div>";
+                return;
+            }
+            
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            
+            document.getElementById("days").innerHTML = days.toString().padStart(2, "0");
+            document.getElementById("hours").innerHTML = hours.toString().padStart(2, "0");
+            document.getElementById("minutes").innerHTML = minutes.toString().padStart(2, "0");
+            document.getElementById("seconds").innerHTML = seconds.toString().padStart(2, "0");
+        };
         
-        document.getElementById("days").innerHTML = days.toString().padStart(2, "0");
-        document.getElementById("hours").innerHTML = hours.toString().padStart(2, "0");
-        document.getElementById("minutes").innerHTML = minutes.toString().padStart(2, "0");
-        document.getElementById("seconds").innerHTML = seconds.toString().padStart(2, "0");
-        
-        if (distance < 0) {
-            clearInterval(countdownTimer);
-            document.getElementById("countdown").innerHTML = "<div class='text-3xl font-bold'>The event has started!</div>";
-        }
-    };
-    
-    updateCountdown();
-    const countdownTimer = setInterval(updateCountdown, 1000);
+        updateCountdown();
+        const countdownTimer = setInterval(updateCountdown, 1000);
 
-    // Initialize Swiper with autoplay and pagination
-    const swiper = new Swiper('.swiper-container', {
-        slidesPerView: 1, // Show one slide at a time
-        loop: true,
-        pagination: {
-            el: '.swiper-pagination',
-            clickable: true,
-        },
-        autoplay: {
-            delay: 3000, // Delay in milliseconds (3000ms = 3 seconds)
-            disableOnInteraction: false, // Continue autoplay after user interactions
-        },
+        // Initialize Swiper with autoplay and pagination
+        const swiper = new Swiper('.swiper-container', {
+            slidesPerView: 1, // Show one slide at a time
+            loop: true,
+            pagination: {
+                el: '.swiper-pagination',
+                clickable: true,
+            },
+            autoplay: {
+                delay: 3000, // Delay in milliseconds (3000ms = 3 seconds)
+                disableOnInteraction: false, // Continue autoplay after user interactions
+            },
+        });
     });
 </script>
 {% endblock %}
